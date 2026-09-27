@@ -1,0 +1,9 @@
+{application, bankerl,
+ [{description, "A local Islamic banking demonstrator"},
+  {vsn, "0.1.0"},
+  {registered, [bankerl_sup, bankerl_store, bankerl_http]},
+  {mod, {bankerl_app, []}},
+  {applications, [kernel, stdlib, crypto]},
+  {env, [{port, 7474}, {bind_ip, {127, 0, 0, 1}},
+      {data_file, "data/bankerl.db"}]},
+  {modules, [bankerl_app, bankerl_sup, bankerl_store, bankerl_http]}]}.

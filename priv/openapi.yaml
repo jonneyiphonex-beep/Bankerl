@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: Bankerl Demo API
+  version: 0.1.0
+  description: >-
+    Local educational banking API. All amounts are USD, provided as decimal
+    strings and returned as integer cents. Sandbox only; not a financial service.
+servers:
+  - url: http://127.0.0.1:7474
+    description: Local native server
+tags:
+  - name: Authentication
+  - name: Accounts
+  - name: Planning
+paths:
+  /api/register:
+    post:
+      tags: [Authentication]
+      summary: Create a customer and current account
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 80 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10, maxLength: 256 }
+      responses:
+        '201':
+          description: Account created; session cookie set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+  /api/login:
+    post:
+      tags: [Authentication]
+      summary: Sign in using a customer number and issue a session cookie
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [customer_number, password]
+              properties:
+                customer_number: { type: string, pattern: '^[0-9]{10}$' }
+                password: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: Signed in; session cookie set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+  /api/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the current session
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/me:
+    get:
+      tags: [Accounts]
+      summary: Get the signed-in customer's accounts and recent ledger entries
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current dashboard
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/deposit:
+    post:
+      tags: [Accounts]
+      summary: Add sandbox funds to the current account
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/Amount'
+      responses:
+        '200': { $ref: '#/components/responses/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/withdraw:
+    post:
+      tags: [Accounts]
+      summary: Withdraw sandbox funds without overdrawing
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/Amount'
+      responses:
+        '200': { $ref: '#/components/responses/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/transfer:
+    post:
+      tags: [Accounts]
+      summary: Transfer sandbox funds to another customer by email
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email, amount]
+              properties:
+                email: { type: string, format: email }
+                amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+                note: { type: string, maxLength: 120 }
+      responses:
+        '200': { $ref: '#/components/responses/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/accounts/savings:
+    post:
+      tags: [Accounts]
+      summary: Open a mudarabah profit-sharing account
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/accounts/move:
+    post:
+      tags: [Accounts]
+      summary: Move funds between two accounts owned by the signed-in customer
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [from, to, amount]
+              properties:
+                from: { type: string, description: Source account ID }
+                to: { type: string, description: Destination account ID }
+                amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+      responses:
+        '200': { $ref: '#/components/responses/Dashboard' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/zakat:
+    post:
+      tags: [Planning]
+      summary: Estimate 2.5 percent of listed balances when at or above the entered nisab
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [nisab]
+              properties:
+                nisab: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+      responses:
+        '200':
+          description: Illustrative estimate, not financial or religious advice
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZakatEstimate' }
+        '400': { $ref: '#/components/responses/ClientError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bankerl_session
+  requestBodies:
+    Amount:
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [amount]
+            properties:
+              amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+  responses:
+    Dashboard:
+      description: Updated customer dashboard
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Dashboard' }
+    ClientError:
+      description: Invalid request or business rule failure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing, expired, or invalid session
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Dashboard:
+      type: object
+      required: [user, accounts, total_balance_cents, transactions]
+      properties:
+        user:
+          type: object
+          required: [name, email, customer_number]
+          properties:
+            name: { type: string }
+            email: { type: string, format: email }
+            customer_number: { type: string, pattern: '^[0-9]{10}$' }
+        accounts:
+          type: array
+          items: { $ref: '#/components/schemas/Account' }
+        total_balance_cents: { type: integer, minimum: 0 }
+        transactions:
+          type: array
+          items: { $ref: '#/components/schemas/Transaction' }
+    Account:
+      type: object
+      required: [id, type, balance_cents, created_at]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [current, mudarabah] }
+        balance_cents: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+    Transaction:
+      type: object
+      required: [id, type, account_id, counterparty_account_id, amount_cents, note, created_at]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [deposit, withdrawal, transfer_sent, transfer_received, allocation_out, allocation_in]
+        account_id: { type: string }
+        counterparty_account_id: { type: [string, 'null'] }
+        amount_cents: { type: integer, minimum: 1 }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+    ZakatEstimate:
+      type: object
+      required: [eligible_balance_cents, nisab_cents, estimated_zakat_cents]
+      properties:
+        eligible_balance_cents: { type: integer, minimum: 0 }
+        nisab_cents: { type: integer, minimum: 1 }
+        estimated_zakat_cents: { type: integer, minimum: 0 }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
